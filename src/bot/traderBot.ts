@@ -9,6 +9,10 @@ import {
 import { decideBtcTrend, btcTrendQuestions } from "./btcTrendBot.ts";
 import { PositionManager, type ClosedPosition, type Position } from "./positionManagement.ts";
 import { calculateHalfKellyPositionPercent } from "./positionSizing.ts";
+import {
+	DEFAULT_PAYOFF_RATIO,
+	DEFAULT_WIN_PROBABILITY,
+} from "./positionSizing.ts";
 
 export const DEFAULT_TREND_CONFIDENCE_THRESHOLD = 0.7;
 export const BTC_SYMBOL = "BTCUSDT";
@@ -20,6 +24,8 @@ export type TraderBotOptions = {
 	positionManager: PositionManager;
 	executionRound?: number;
 	confidenceThreshold?: number;
+	winProbability?: number;
+	payoffRatio?: number;
 	getClosePrices?: () => Promise<BtcTrendClosePrices>;
 };
 
@@ -49,6 +55,8 @@ export async function runTraderBot({
 	positionManager,
 	executionRound = 1,
 	confidenceThreshold = DEFAULT_TREND_CONFIDENCE_THRESHOLD,
+	winProbability = DEFAULT_WIN_PROBABILITY,
+	payoffRatio = DEFAULT_PAYOFF_RATIO,
 	getClosePrices = getRecentBtcTrendClosePrices,
 }: TraderBotOptions): Promise<TraderBotResult> {
 	if (!Number.isInteger(executionRound) || executionRound < 1) {
@@ -80,7 +88,8 @@ export async function runTraderBot({
 		confidenceThreshold,
 		positionRecommendation: buildPositionRecommendation(
 			positionManager,
-			trend.confidence,
+			winProbability,
+			payoffRatio,
 			targetType,
 			latestClose,
 		),
@@ -109,7 +118,8 @@ export async function runTraderBot({
 	}
 	result.positionRecommendation = buildPositionRecommendation(
 		positionManager,
-		trend.confidence,
+		winProbability,
+		payoffRatio,
 		targetType,
 		exitPrice,
 	);
@@ -143,13 +153,15 @@ export async function runTraderBot({
 
 function buildPositionRecommendation(
 	positionManager: PositionManager,
-	confidence: number,
+	winProbability: number,
+	payoffRatio: number,
 	direction: "BUY" | "SELL" | null,
 	price: number | undefined,
 ): TraderBotResult["positionRecommendation"] {
-	const positionPercent = confidence >= 0 && confidence <= 1
-		? calculateHalfKellyPositionPercent({ winProbability: confidence })
-		: null;
+	const positionPercent = calculateHalfKellyPositionPercent({
+		winProbability,
+		payoffRatio,
+	});
 	const requestedValue = positionPercent === null
 		? null
 		: positionManager.balance * positionPercent / 100;

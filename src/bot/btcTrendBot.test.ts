@@ -98,7 +98,7 @@ test("closes an opposing position before opening the confirmed direction", async
   assert.equal(result.closedPositions[0].profitOrLoss, -1_000);
   assert.equal(result.openedPosition?.type, "BUY");
   assert.equal(result.openedPosition?.entryPrice, 60_000);
-  assert.equal(result.openedPosition?.shares, 9_000 * (0.8 - 0.2 / 3) / 2 / 60_000);
+  assert.ok(Math.abs(result.openedPosition!.shares - 9_000 * (0.35 - 0.65 / 3) / 2 / 60_000) < 1e-12);
   assert.equal(result.decisionContext.executionRound, 3);
   assert.deepEqual(result.decisionContext.state, {
     close15m: [60_000],
@@ -106,8 +106,45 @@ test("closes an opposing position before opening the confirmed direction", async
   });
   assert.deepEqual(result.decisionContext.questions, btcTrendQuestions);
   assert.equal(result.positionRecommendation.direction, "BUY");
-  assert.ok(Math.abs(result.positionRecommendation.requestedValue! - 3_300) < 1e-9);
+  assert.ok(Math.abs(result.positionRecommendation.requestedValue! - 600) < 1e-9);
   assert.equal(result.positionRecommendation.availableFunds, 9_000);
   assert.equal(result.positionRecommendation.shares, result.openedPosition.shares);
   assert.deepEqual(account.positions.map(({ type }) => type), ["BUY"]);
+});
+
+test("uses configured Kelly values independently of trend confidence", async () => {
+  const account = new PositionManager(10_000);
+  const result = await runTraderBot({
+    client: createTrendClient("看涨", 0.8),
+    positionManager: account,
+    winProbability: 0.4,
+    payoffRatio: 2,
+    getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000] }),
+  });
+
+  assert.ok(Math.abs(result.positionRecommendation.positionPercent! - 5) < 1e-12);
+  assert.ok(Math.abs(result.positionRecommendation.requestedValue! - 500) < 1e-9);
+  assert.ok(Math.abs(result.openedPosition!.shares - 500 / 60_000) < 1e-12);
+});
+
+test("requests another Jev decision after opening a position", async () => {
+  const account = new PositionManager(10_000);
+  let decisionCount = 0;
+  const client = {
+    async decide<Q extends JevQuestions>(request: {
+      state: JevValue;
+      questions: Q;
+    }): Promise<JevDecision<Q>> {
+      decisionCount += 1;
+      return createTrendClient("看涨", 0.8).decide(request);
+    },
+  } satisfies Pick<JevDecisionClient, "decide">;
+  const getClosePrices = async () => ({ close15m: [60_000], close4h: [59_000] });
+
+  const firstResult = await runTraderBot({ client, positionManager: account, getClosePrices });
+  const secondResult = await runTraderBot({ client, positionManager: account, getClosePrices });
+
+  assert.ok(firstResult.openedPosition);
+  assert.equal(secondResult.reason, "already-positioned");
+  assert.equal(decisionCount, 2);
 });

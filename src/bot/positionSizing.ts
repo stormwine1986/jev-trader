@@ -3,8 +3,8 @@ export type PositionSizingOptions = {
   payoffRatio?: number;
 };
 
-const DEFAULT_WIN_PROBABILITY = 0.35;
-const DEFAULT_PAYOFF_RATIO = 3;
+export const DEFAULT_WIN_PROBABILITY = 0.35;
+export const DEFAULT_PAYOFF_RATIO = 3;
 
 export function calculateHalfKellyPositionPercent(
   options: PositionSizingOptions = {},
