@@ -1,0 +1,3 @@
+- 使用 Typescript 和 NodeJs 开发程序
+- 每个组件应该具备测试用例
+- Jev 的快速指南：https://docs.typesafe.ai/introduction/quickstart
