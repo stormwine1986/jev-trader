@@ -80,6 +80,11 @@ test("does not calculate a position when trend confidence is below the threshold
   assert.equal(result.reason, "below-threshold");
   assert.deepEqual(account.positions, []);
   assert.equal(account.availableFunds, 10_000);
+  assert.equal(result.positionRecommendation, null);
+  assert.deepEqual(result.decisionContext?.state, {
+    close15m: [60_000],
+    close4h: [59_000],
+  });
 });
 
 test("opens a position when trend confidence equals the threshold", async () => {
@@ -92,7 +97,7 @@ test("opens a position when trend confidence equals the threshold", async () => 
 
   assert.equal(result.reason, undefined);
   assert.equal(result.openedPosition?.type, "BUY");
-  assert.equal(result.positionRecommendation.direction, "BUY");
+  assert.equal(result.positionRecommendation?.direction, "BUY");
 });
 
 test("does not open a position without a positive ATR", async () => {
@@ -105,6 +110,7 @@ test("does not open a position without a positive ATR", async () => {
 
   assert.equal(result.reason, "invalid-atr");
   assert.deepEqual(account.positions, []);
+  assert.equal(result.positionRecommendation, null);
 });
 
 test("monitors an open position without requesting a trend decision", async () => {
@@ -140,7 +146,7 @@ test("monitors an open position without requesting a trend decision", async () =
   assert.deepEqual(result.closedPositions, []);
   assert.equal(result.openedPosition, undefined);
   assert.equal(result.decision, undefined);
-  assert.equal(result.positionRecommendation.positionPercent, null);
+  assert.equal(result.positionRecommendation, null);
   assert.deepEqual(account.positions, [position]);
 });
 
@@ -180,11 +186,13 @@ test("uses configured Kelly values independently of trend confidence", async () 
     getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000], atr14_15m: 100 }),
   });
 
-  assert.ok(Math.abs(result.positionRecommendation.positionPercent! - 5) < 1e-12);
-  assert.ok(Math.abs(result.positionRecommendation.requestedValue! - 500) < 1e-9);
+  const recommendation = result.positionRecommendation;
+  assert.ok(recommendation);
+  assert.ok(Math.abs(recommendation.positionPercent! - 5) < 1e-12);
+  assert.ok(Math.abs(recommendation.requestedValue! - 500) < 1e-9);
   assert.ok(Math.abs(result.openedPosition!.shares - 500 / 60_000) < 1e-12);
-  assert.equal(result.positionRecommendation.stopLossPrice, 59_900);
-  assert.equal(result.positionRecommendation.takeProfitPrice, 60_200);
+  assert.equal(recommendation.stopLossPrice, 59_900);
+  assert.equal(recommendation.takeProfitPrice, 60_200);
 });
 
 test("requests another Jev decision after opening a position", async () => {

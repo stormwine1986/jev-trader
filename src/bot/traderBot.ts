@@ -22,6 +22,16 @@ export const DEFAULT_TREND_CONFIDENCE_THRESHOLD = 0.7;
 export const BTC_SYMBOL = "BTCUSDT";
 
 type TrendDecision = JevDecision<typeof btcTrendQuestions>;
+type PositionRecommendation = {
+	direction: "BUY" | "SELL" | null;
+	positionPercent: number | null;
+	requestedValue: number | null;
+	availableFunds: number;
+	executableValue: number | null;
+	shares: number | null;
+	stopLossPrice: number | null;
+	takeProfitPrice: number | null;
+};
 
 export type TraderBotOptions = {
 	client: Pick<JevDecisionClient, "decide">;
@@ -38,21 +48,12 @@ export type TraderBotResult = {
 	executionRound: number;
 	decisionContext?: {
 		executionRound: number;
-		state: BtcTrendClosePrices;
+		state: Pick<BtcTrendClosePrices, "close15m" | "close4h">;
 		questions: typeof btcTrendQuestions;
 	};
 	decision?: TrendDecision;
 	confidenceThreshold: number;
-	positionRecommendation: {
-		direction: "BUY" | "SELL" | null;
-		positionPercent: number | null;
-		requestedValue: number | null;
-		availableFunds: number;
-		executableValue: number | null;
-		shares: number | null;
-		stopLossPrice: number | null;
-		takeProfitPrice: number | null;
-	};
+	positionRecommendation: PositionRecommendation | null;
 	closedPositions: ClosedPosition[];
 	openedPosition?: Position;
 	currentPrice?: number;
@@ -86,16 +87,7 @@ export async function runTraderBot({
 		const result: TraderBotResult = {
 			executionRound,
 			confidenceThreshold,
-			positionRecommendation: {
-				direction: null,
-				positionPercent: null,
-				requestedValue: null,
-				availableFunds: positionManager.availableFunds,
-				executableValue: null,
-				shares: null,
-				stopLossPrice: null,
-				takeProfitPrice: null,
-			},
+			positionRecommendation: null,
 			closedPositions: [],
 			currentPrice,
 		};
@@ -144,21 +136,15 @@ export async function runTraderBot({
 		executionRound,
 		decisionContext: {
 			executionRound,
-			state: closePrices,
+			state: {
+				close15m: closePrices.close15m,
+				close4h: closePrices.close4h,
+			},
 			questions: btcTrendQuestions,
 		},
 		decision,
 		confidenceThreshold,
-		positionRecommendation: {
-			direction: null,
-			positionPercent: null,
-			requestedValue: null,
-			availableFunds: positionManager.availableFunds,
-			executableValue: null,
-			shares: null,
-			stopLossPrice: null,
-			takeProfitPrice: null,
-		},
+		positionRecommendation: null,
 		closedPositions: [],
 	};
 
@@ -181,7 +167,7 @@ export async function runTraderBot({
 		return result;
 	}
 
-	result.positionRecommendation = buildPositionRecommendation(
+	const positionRecommendation = buildPositionRecommendation(
 		positionManager,
 		winProbability,
 		payoffRatio,
@@ -190,13 +176,14 @@ export async function runTraderBot({
 		exitPrice,
 		closePrices.atr14_15m,
 	);
+	result.positionRecommendation = positionRecommendation;
 
-	if (result.positionRecommendation.positionPercent === 0) {
+	if (positionRecommendation.positionPercent === 0) {
 		result.reason = "no-positive-edge";
 		return result;
 	}
 
-	const positionValue = result.positionRecommendation.executableValue!;
+	const positionValue = positionRecommendation.executableValue!;
 	if (!Number.isFinite(positionValue) || positionValue <= 0) {
 		result.reason = "no-available-funds";
 		return result;
@@ -207,8 +194,8 @@ export async function runTraderBot({
 		type: targetType,
 		shares: positionValue / exitPrice,
 		entryPrice: exitPrice,
-		stopLossPrice: result.positionRecommendation.stopLossPrice!,
-		takeProfitPrice: result.positionRecommendation.takeProfitPrice!,
+		stopLossPrice: positionRecommendation.stopLossPrice!,
+		takeProfitPrice: positionRecommendation.takeProfitPrice!,
 	});
 	return result;
 }
@@ -221,7 +208,7 @@ function buildPositionRecommendation(
 	direction: "BUY" | "SELL" | null,
 	price: number | undefined,
 	atr14: number,
-): TraderBotResult["positionRecommendation"] {
+): PositionRecommendation {
 	const positionPercent = calculateHalfKellyPositionPercent({
 		winProbability,
 		payoffRatio,

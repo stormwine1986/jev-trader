@@ -59,3 +59,34 @@ test("formats holding-position status with unrealized PnL", () => {
     "8,start_at=2026.10.11 20:34:56 UTC+8,next=2026.10.11 20:49:56 UTC+8,Unrealized PnL=10,",
   );
 });
+
+test("formats the Jev choice and confidence below the threshold", () => {
+  assert.equal(
+    formatTraderRoundStatus(
+      1,
+      new Date("2026-10-11T12:05:55.000Z"),
+      new Date("2026-10-11T12:20:55.000Z"),
+      {
+        executionRound: 1,
+        decision: {
+          model: "jev-test",
+          answers: {
+            trend: {
+              type: "choice",
+              choice: "中性",
+              probabilities: { 看涨: 0.2, 中性: 0.6, 看跌: 0.2 },
+              confidence: 0.6,
+            },
+          },
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+        confidenceThreshold: 0.7,
+        positionRecommendation: null,
+        closedPositions: [],
+        reason: "below-threshold",
+      },
+      10_000,
+    ),
+    "1,start_at=2026.10.11 20:05:55 UTC+8,next=2026.10.11 20:20:55 UTC+8,choice=中性,confidence=0.6",
+  );
+});

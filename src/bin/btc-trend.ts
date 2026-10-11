@@ -45,6 +45,10 @@ export function formatTraderRoundStatus(
   if (result.openedPosition) {
     return `${status},entry_price=${result.openedPosition.entryPrice},type=${result.openedPosition.type},balance=${balance},positionSize=${result.openedPosition.shares}`;
   }
+  if (result.reason === "below-threshold" && result.decision) {
+    const trend = result.decision.answers.trend;
+    return `${status},choice=${trend.choice},confidence=${trend.confidence}`;
+  }
   return status;
 }
 
