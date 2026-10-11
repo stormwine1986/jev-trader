@@ -19,7 +19,6 @@ test("formats nested error details for CLI failures", () => {
   assert.match(details, /503/);
   assert.match(details, /upstream unavailable/);
 });
-
 test("summarizes the round with the compact fields needed for CLI output", () => {
   const summary = summarizeRound({
     startedAt: "2026-10-11T12:34:56.789Z",

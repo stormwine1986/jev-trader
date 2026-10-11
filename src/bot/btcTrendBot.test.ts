@@ -89,6 +89,7 @@ test("closes an opposing position before opening the confirmed direction", async
   const result = await runTraderBot({
     client: createTrendClient("看涨", 0.8),
     positionManager: account,
+    executionRound: 3,
     getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000] }),
   });
 
@@ -98,6 +99,7 @@ test("closes an opposing position before opening the confirmed direction", async
   assert.equal(result.openedPosition?.type, "BUY");
   assert.equal(result.openedPosition?.entryPrice, 60_000);
   assert.equal(result.openedPosition?.shares, 9_000 * (0.8 - 0.2 / 3) / 2 / 60_000);
+  assert.equal(result.decisionContext.executionRound, 3);
   assert.deepEqual(result.decisionContext.state, {
     close15m: [60_000],
     close4h: [59_000],

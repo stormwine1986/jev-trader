@@ -18,13 +18,27 @@ type TrendDecision = JevDecision<typeof btcTrendQuestions>;
 export type TraderBotOptions = {
 	client: Pick<JevDecisionClient, "decide">;
 	positionManager: PositionManager;
+	executionRound?: number;
 	confidenceThreshold?: number;
 	getClosePrices?: () => Promise<BtcTrendClosePrices>;
 };
 
 export type TraderBotResult = {
+	decisionContext: {
+		executionRound: number;
+		state: BtcTrendClosePrices;
+		questions: typeof btcTrendQuestions;
+	};
 	decision: TrendDecision;
 	confidenceThreshold: number;
+	positionRecommendation: {
+		direction: "BUY" | "SELL" | null;
+		positionPercent: number | null;
+		requestedValue: number | null;
+		availableFunds: number;
+		executableValue: number | null;
+		shares: number | null;
+	};
 	closedPositions: ClosedPosition[];
 	openedPosition?: Position;
 	reason?: "below-threshold" | "unsupported-trend" | "already-positioned" | "no-positive-edge" | "no-available-funds";
@@ -33,9 +47,13 @@ export type TraderBotResult = {
 export async function runTraderBot({
 	client,
 	positionManager,
+	executionRound = 1,
 	confidenceThreshold = DEFAULT_TREND_CONFIDENCE_THRESHOLD,
 	getClosePrices = getRecentBtcTrendClosePrices,
 }: TraderBotOptions): Promise<TraderBotResult> {
+	if (!Number.isInteger(executionRound) || executionRound < 1) {
+		throw new RangeError("executionRound must be a positive integer");
+	}
 	if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
 		throw new RangeError("confidenceThreshold must be between 0 and 1");
 	}
@@ -54,6 +72,7 @@ export async function runTraderBot({
 	const latestClose = closePrices.close15m.at(-1);
 	const result: TraderBotResult = {
 		decisionContext: {
+			executionRound,
 			state: closePrices,
 			questions: btcTrendQuestions,
 		},
