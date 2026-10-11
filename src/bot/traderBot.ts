@@ -140,7 +140,6 @@ export async function runTraderBot({
 		: trend.choice === "看跌"
 			? "SELL"
 			: null;
-	const latestClose = closePrices.close15m.at(-1);
 	const result: TraderBotResult = {
 		executionRound,
 		decisionContext: {
@@ -150,19 +149,20 @@ export async function runTraderBot({
 		},
 		decision,
 		confidenceThreshold,
-		positionRecommendation: buildPositionRecommendation(
-			positionManager,
-			winProbability,
-			payoffRatio,
-			stopLossAtrMultiplier,
-			targetType,
-			latestClose,
-			closePrices.atr14_15m,
-		),
+		positionRecommendation: {
+			direction: null,
+			positionPercent: null,
+			requestedValue: null,
+			availableFunds: positionManager.availableFunds,
+			executableValue: null,
+			shares: null,
+			stopLossPrice: null,
+			takeProfitPrice: null,
+		},
 		closedPositions: [],
 	};
 
-	if (trend.confidence <= confidenceThreshold) {
+	if (trend.confidence < confidenceThreshold) {
 		result.reason = "below-threshold";
 		return result;
 	}

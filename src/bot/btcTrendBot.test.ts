@@ -68,7 +68,21 @@ function createTrendClient(choice: string, confidence: number) {
   } satisfies Pick<JevDecisionClient, "decide">;
 }
 
-test("does not trade when trend confidence does not exceed the threshold", async () => {
+test("does not calculate a position when trend confidence is below the threshold", async () => {
+  const account = new PositionManager(10_000);
+  const result = await runTraderBot({
+    client: createTrendClient("看涨", 0.69),
+    positionManager: account,
+    winProbability: -1,
+    getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000], atr14_15m: 100 }),
+  });
+
+  assert.equal(result.reason, "below-threshold");
+  assert.deepEqual(account.positions, []);
+  assert.equal(account.availableFunds, 10_000);
+});
+
+test("opens a position when trend confidence equals the threshold", async () => {
   const account = new PositionManager(10_000);
   const result = await runTraderBot({
     client: createTrendClient("看涨", 0.7),
@@ -76,9 +90,9 @@ test("does not trade when trend confidence does not exceed the threshold", async
     getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000], atr14_15m: 100 }),
   });
 
-  assert.equal(result.reason, "below-threshold");
-  assert.deepEqual(account.positions, []);
-  assert.equal(account.availableFunds, 10_000);
+  assert.equal(result.reason, undefined);
+  assert.equal(result.openedPosition?.type, "BUY");
+  assert.equal(result.positionRecommendation.direction, "BUY");
 });
 
 test("does not open a position without a positive ATR", async () => {
