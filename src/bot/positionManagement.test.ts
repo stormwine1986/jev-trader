@@ -119,3 +119,25 @@ test("returns defensive copies and rejects closing unknown positions", () => {
 	assert.equal(manager.positions[0].shares, 1);
 	assert.throws(() => manager.closePosition(999, 50), RangeError);
 });
+
+test("restores available funds and positions from an account snapshot", () => {
+	const manager = PositionManager.fromSnapshot({
+		balance: 1_000,
+		availableFunds: 800,
+		positions: [
+			{ id: 4, symbol: "BTCUSDT", type: "BUY", shares: 2, entryPrice: 100 },
+		],
+	});
+
+	assert.equal(manager.balance, 1_000);
+	assert.equal(manager.availableFunds, 800);
+	assert.deepEqual(manager.positions, [
+		{ id: 4, symbol: "BTCUSDT", type: "BUY", shares: 2, entryPrice: 100 },
+	]);
+	assert.equal(manager.openPosition({
+		symbol: "ETHUSDT",
+		type: "BUY",
+		shares: 1,
+		entryPrice: 100,
+	}).id, 5);
+});

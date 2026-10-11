@@ -6,7 +6,7 @@ import { JevDecisionClient } from "../jev/jevDecisionClient.ts";
 import { runTraderBot } from "../bot/traderBot.ts";
 import { PositionManager } from "../bot/positionManagement.ts";
 import { DEFAULT_TREND_CONFIDENCE_THRESHOLD } from "../bot/traderBot.ts";
-import { writeRoundAuditRecord } from "../bot/audit.ts";
+import { readLatestAuditAccount, writeRoundAuditRecord } from "../bot/audit.ts";
 
 const RUN_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -60,9 +60,10 @@ export function formatErrorDetails(error: unknown): string {
 async function main() {
   const apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY ?? "";
   const client = new JevDecisionClient({ apiKey });
-  const positionManager = new PositionManager(
-    Number(process.env.TRADER_INITIAL_BALANCE ?? 10_000),
-  );
+  const lastAccount = await readLatestAuditAccount();
+  const positionManager = lastAccount === undefined
+    ? new PositionManager(Number(process.env.TRADER_INITIAL_BALANCE ?? 10_000))
+    : PositionManager.fromSnapshot(lastAccount);
 
   while (true) {
     const startedAt = new Date().toISOString();
