@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { inspect } from "node:util";
 import { JevDecisionClient } from "../jev/jevDecisionClient.ts";
 import { runTraderBot } from "../bot/traderBot.ts";
+import type { TraderBotResult } from "../bot/traderBot.ts";
 import { PositionManager } from "../bot/positionManagement.ts";
 import { DEFAULT_TREND_CONFIDENCE_THRESHOLD } from "../bot/traderBot.ts";
 import {
@@ -21,6 +22,30 @@ export function formatRoundStatus(
   nextAt: Date,
 ): string {
   return `${executionRound},start_at=${formatUtcPlusEight(startedAt)},next=${formatUtcPlusEight(nextAt)}`;
+}
+
+export function formatTraderRoundStatus(
+  executionRound: number,
+  startedAt: Date,
+  nextAt: Date,
+  result: TraderBotResult,
+  balance: number,
+): string {
+  const status = formatRoundStatus(executionRound, startedAt, nextAt);
+  if (result.closedPositions.length > 0) {
+    const realizedPnl = result.closedPositions.reduce(
+      (total, position) => total + position.profitOrLoss,
+      0,
+    );
+    return `${status},exit_price=${result.currentPrice},Realized PnL=${realizedPnl},Balance=${balance}`;
+  }
+  if (result.reason === "holding-position") {
+    return `${status},Unrealized PnL=${result.unrealizedPnl},`;
+  }
+  if (result.openedPosition) {
+    return `${status},entry_price=${result.openedPosition.entryPrice},type=${result.openedPosition.type},balance=${balance},positionSize=${result.openedPosition.shares}`;
+  }
+  return status;
 }
 
 function formatUtcPlusEight(date: Date): string {
@@ -55,8 +80,6 @@ async function main() {
     executionRound += 1;
     const startedAt = new Date();
     const nextAt = new Date(startedAt.getTime() + RUN_INTERVAL_MS);
-    console.log(formatRoundStatus(executionRound, startedAt, nextAt));
-
     let result: Awaited<ReturnType<typeof runTraderBot>>;
     try {
       result = await runTraderBot({
@@ -79,6 +102,7 @@ async function main() {
         ),
       });
     } catch (error) {
+      console.log(formatRoundStatus(executionRound, startedAt, nextAt));
       console.error(`Trader bot round ${executionRound} failed: ${formatErrorDetails(error)}`);
       await waitUntil(nextAt);
       continue;
@@ -94,6 +118,7 @@ async function main() {
       result,
       account,
     });
+    console.log(formatTraderRoundStatus(executionRound, startedAt, nextAt, result, account.balance));
 
     await waitUntil(nextAt);
   }

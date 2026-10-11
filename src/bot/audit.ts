@@ -33,12 +33,16 @@ export async function readLatestAuditState(
 	}
 
 	const result = "result" in record ? record.result : undefined;
+	const topLevelRound = typeof result === "object" && result !== null && "executionRound" in result
+		? result.executionRound
+		: undefined;
 	const decisionContext = typeof result === "object" && result !== null && "decisionContext" in result
 		? result.decisionContext
 		: undefined;
-	const storedRound = typeof decisionContext === "object" && decisionContext !== null && "executionRound" in decisionContext
+	const contextRound = typeof decisionContext === "object" && decisionContext !== null && "executionRound" in decisionContext
 		? decisionContext.executionRound
 		: undefined;
+	const storedRound = topLevelRound ?? contextRound;
 	if (storedRound !== undefined && (!Number.isSafeInteger(storedRound) || (storedRound as number) < 1)) {
 		throw new TypeError(`Latest audit record ${latestFile} has an invalid execution round`);
 	}

@@ -93,47 +93,66 @@ test("does not open a position without a positive ATR", async () => {
   assert.deepEqual(account.positions, []);
 });
 
-test("closes an opposing position before opening the confirmed direction", async () => {
+test("monitors an open position without requesting a trend decision", async () => {
+  const account = new PositionManager(10_000);
+  const position = account.openPosition({
+    symbol: "BTCUSDT",
+    type: "SELL",
+    shares: 0.01,
+    entryPrice: 50_000,
+    stopLossPrice: 51_000,
+    takeProfitPrice: 48_000,
+  });
+  let decisionCount = 0;
+  const client = {
+    async decide<Q extends JevQuestions>(): Promise<JevDecision<Q>> {
+      decisionCount += 1;
+      throw new Error("trend decision should be skipped while positioned");
+    },
+  } satisfies Pick<JevDecisionClient, "decide">;
+
+  const result = await runTraderBot({
+    client,
+    positionManager: account,
+    executionRound: 3,
+    confidenceThreshold: Number.NaN,
+    getClosePrices: async () => ({ close15m: [49_000], close4h: [], atr14_15m: 100 }),
+  });
+
+  assert.equal(decisionCount, 0);
+  assert.equal(result.reason, "holding-position");
+  assert.equal(result.currentPrice, 49_000);
+  assert.equal(result.unrealizedPnl, 10);
+  assert.deepEqual(result.closedPositions, []);
+  assert.equal(result.openedPosition, undefined);
+  assert.equal(result.decision, undefined);
+  assert.equal(result.positionRecommendation.positionPercent, null);
+  assert.deepEqual(account.positions, [position]);
+});
+
+test("closes a position at take profit without reopening in the same round", async () => {
   const account = new PositionManager(10_000);
   account.openPosition({
     symbol: "BTCUSDT",
-    type: "SELL",
-    shares: 0.1,
+    type: "BUY",
+    shares: 0.01,
     entryPrice: 50_000,
+    stopLossPrice: 49_000,
+    takeProfitPrice: 52_000,
   });
-
   const result = await runTraderBot({
-    client: createTrendClient("看涨", 0.8),
+    client: createTrendClient("看跌", 0.9),
     positionManager: account,
-    executionRound: 3,
-    getClosePrices: async () => ({ close15m: [60_000], close4h: [59_000], atr14_15m: 100 }),
+    getClosePrices: async () => ({ close15m: [52_000], close4h: [], atr14_15m: 100 }),
   });
 
+  assert.equal(result.reason, "take-profit");
   assert.equal(result.closedPositions.length, 1);
-  assert.equal(result.closedPositions[0].exitPrice, 60_000);
-  assert.equal(result.closedPositions[0].profitOrLoss, -1_000);
-  assert.equal(result.openedPosition?.type, "BUY");
-  assert.equal(result.openedPosition?.entryPrice, 60_000);
-  assert.ok(Math.abs(result.openedPosition!.shares - 9_000 * (0.35 - 0.65 / 3) / 2 / 60_000) < 1e-12);
-  assert.equal(result.decisionContext.executionRound, 3);
-  assert.deepEqual(result.decisionContext.state, {
-    close15m: [60_000],
-    close4h: [59_000],
-    atr14_15m: 100,
-  });
-  assert.deepEqual(result.decisionContext.questions, btcTrendQuestions);
-  assert.equal(result.positionRecommendation.direction, "BUY");
-  assert.ok(Math.abs(result.positionRecommendation.requestedValue! - 600) < 1e-9);
-  assert.equal(result.positionRecommendation.availableFunds, 9_000);
-  assert.equal(result.positionRecommendation.shares, result.openedPosition.shares);
-  assert.equal(result.positionRecommendation.stopLossPrice, 59_800);
-  assert.equal(result.positionRecommendation.takeProfitPrice, 60_600);
-  assert.equal(result.openedPosition.stopLossPrice, result.positionRecommendation.stopLossPrice);
-  assert.equal(result.openedPosition.takeProfitPrice, result.positionRecommendation.takeProfitPrice);
-  assert.equal(account.positions[0].stopLossPrice, result.positionRecommendation.stopLossPrice);
-  assert.equal(account.positions[0].takeProfitPrice, result.positionRecommendation.takeProfitPrice);
-  assert.deepEqual(account.positions.map(({ type }) => type), ["BUY"]);
-  assert.equal(result.decisionContext.state.atr14_15m, 100);
+  assert.equal(result.closedPositions[0].exitPrice, 52_000);
+  assert.equal(result.closedPositions[0].profitOrLoss, 20);
+  assert.equal(result.decision, undefined);
+  assert.equal(result.openedPosition, undefined);
+  assert.deepEqual(account.positions, []);
 });
 
 test("uses configured Kelly values independently of trend confidence", async () => {
@@ -172,6 +191,8 @@ test("requests another Jev decision after opening a position", async () => {
   const secondResult = await runTraderBot({ client, positionManager: account, getClosePrices });
 
   assert.ok(firstResult.openedPosition);
-  assert.equal(secondResult.reason, "already-positioned");
-  assert.equal(decisionCount, 2);
+  assert.equal(secondResult.reason, "holding-position");
+  assert.equal(secondResult.unrealizedPnl, 0);
+  assert.equal(secondResult.decision, undefined);
+  assert.equal(decisionCount, 1);
 });

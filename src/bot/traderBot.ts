@@ -35,12 +35,13 @@ export type TraderBotOptions = {
 };
 
 export type TraderBotResult = {
-	decisionContext: {
+	executionRound: number;
+	decisionContext?: {
 		executionRound: number;
 		state: BtcTrendClosePrices;
 		questions: typeof btcTrendQuestions;
 	};
-	decision: TrendDecision;
+	decision?: TrendDecision;
 	confidenceThreshold: number;
 	positionRecommendation: {
 		direction: "BUY" | "SELL" | null;
@@ -54,7 +55,9 @@ export type TraderBotResult = {
 	};
 	closedPositions: ClosedPosition[];
 	openedPosition?: Position;
-	reason?: "below-threshold" | "unsupported-trend" | "invalid-atr" | "already-positioned" | "no-positive-edge" | "no-available-funds";
+	currentPrice?: number;
+	unrealizedPnl?: number;
+	reason?: "below-threshold" | "unsupported-trend" | "invalid-atr" | "no-positive-edge" | "no-available-funds" | "stop-loss" | "take-profit" | "holding-position";
 };
 
 export async function runTraderBot({
@@ -69,6 +72,58 @@ export async function runTraderBot({
 }: TraderBotOptions): Promise<TraderBotResult> {
 	if (!Number.isInteger(executionRound) || executionRound < 1) {
 		throw new RangeError("executionRound must be a positive integer");
+	}
+	const openBtcPositions = positionManager.positions.filter(
+		(position) => position.symbol === BTC_SYMBOL,
+	);
+	if (openBtcPositions.length > 0) {
+		const closePrices = await getClosePrices();
+		const currentPrice = closePrices.close15m.at(-1);
+		if (currentPrice === undefined || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+			throw new RangeError("the latest close price must be greater than 0");
+		}
+
+		const result: TraderBotResult = {
+			executionRound,
+			confidenceThreshold,
+			positionRecommendation: {
+				direction: null,
+				positionPercent: null,
+				requestedValue: null,
+				availableFunds: positionManager.availableFunds,
+				executableValue: null,
+				shares: null,
+				stopLossPrice: null,
+				takeProfitPrice: null,
+			},
+			closedPositions: [],
+			currentPrice,
+		};
+		for (const position of openBtcPositions) {
+			const stopTriggered = position.stopLossPrice !== undefined && (
+				position.type === "BUY"
+					? currentPrice <= position.stopLossPrice
+					: currentPrice >= position.stopLossPrice
+			);
+			const takeProfitTriggered = position.takeProfitPrice !== undefined && (
+				position.type === "BUY"
+					? currentPrice >= position.takeProfitPrice
+					: currentPrice <= position.takeProfitPrice
+			);
+			if (stopTriggered || takeProfitTriggered) {
+				result.closedPositions.push(positionManager.closePosition(position.id, currentPrice));
+				result.reason ??= stopTriggered ? "stop-loss" : "take-profit";
+			}
+		}
+		if (result.closedPositions.length === 0) {
+			result.reason = "holding-position";
+			result.unrealizedPnl = openBtcPositions.reduce(
+				(total, position) => total + (position.type === "BUY" ? 1 : -1)
+					* (currentPrice - position.entryPrice) * position.shares,
+				0,
+			);
+		}
+		return result;
 	}
 	if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
 		throw new RangeError("confidenceThreshold must be between 0 and 1");
@@ -87,6 +142,7 @@ export async function runTraderBot({
 			: null;
 	const latestClose = closePrices.close15m.at(-1);
 	const result: TraderBotResult = {
+		executionRound,
 		decisionContext: {
 			executionRound,
 			state: closePrices,
@@ -125,11 +181,6 @@ export async function runTraderBot({
 		return result;
 	}
 
-	for (const position of positionManager.positions) {
-		if (position.symbol === BTC_SYMBOL && position.type !== targetType) {
-			result.closedPositions.push(positionManager.closePosition(position.id, exitPrice));
-		}
-	}
 	result.positionRecommendation = buildPositionRecommendation(
 		positionManager,
 		winProbability,
@@ -139,13 +190,6 @@ export async function runTraderBot({
 		exitPrice,
 		closePrices.atr14_15m,
 	);
-
-	if (positionManager.positions.some(
-		(position) => position.symbol === BTC_SYMBOL && position.type === targetType,
-	)) {
-		result.reason = "already-positioned";
-		return result;
-	}
 
 	if (result.positionRecommendation.positionPercent === 0) {
 		result.reason = "no-positive-edge";

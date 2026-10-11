@@ -84,3 +84,22 @@ test("rejects invalid round start timestamps", async () => {
 		RangeError,
 	);
 });
+
+test("restores the round from a position-management audit without decision context", async () => {
+	const directory = await mkdtemp(join(tmpdir(), "jev-trader-audit-"));
+	const record = {
+		startedAt: "2026-10-11T12:34:56.789Z",
+		result: { executionRound: 9, reason: "holding-position" },
+		account: { balance: 10_000, availableFunds: 9_000, positions: [] },
+	};
+
+	try {
+		await writeRoundAuditRecord(record, directory);
+		assert.deepEqual(await readLatestAuditState(directory), {
+			account: record.account,
+			executionRound: 9,
+		});
+	} finally {
+		await rm(directory, { recursive: true, force: true });
+	}
+});
