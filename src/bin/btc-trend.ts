@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { pathToFileURL } from "node:url";
+import { inspect } from "node:util";
 import { JevDecisionClient } from "../jev/jevDecisionClient.ts";
 import { runTraderBot } from "../bot/traderBot.ts";
 import { PositionManager } from "../bot/positionManagement.ts";
@@ -50,6 +51,12 @@ export function summarizeRound({
   };
 }
 
+export function formatErrorDetails(error: unknown): string {
+  return error instanceof Error
+    ? inspect(error, { depth: null, colors: false })
+    : String(error);
+}
+
 async function main() {
   const apiKey = process.env.TYPESAFE_API_KEY ?? process.env.JEV_API_KEY ?? "";
   const client = new JevDecisionClient({ apiKey });
@@ -95,8 +102,7 @@ const isDirectExecution =
 
 if (isDirectExecution) {
   main().catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Trader bot failed: ${message}`);
+    console.error(`Trader bot failed: ${formatErrorDetails(error)}`);
     process.exitCode = 1;
   });
 }

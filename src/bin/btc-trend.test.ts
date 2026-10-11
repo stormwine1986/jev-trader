@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { summarizeRound } from "./btc-trend.ts";
+import { formatErrorDetails, summarizeRound } from "./btc-trend.ts";
+
+test("formats nested error details for CLI failures", () => {
+  const cause = Object.assign(new Error("socket hang up"), {
+    code: "ECONNRESET",
+  });
+  const error = Object.assign(new TypeError("fetch failed", { cause }), {
+    status: 503,
+    responseBody: "upstream unavailable",
+  });
+
+  const details = formatErrorDetails(error);
+
+  assert.match(details, /fetch failed/);
+  assert.match(details, /ECONNRESET/);
+  assert.match(details, /socket hang up/);
+  assert.match(details, /503/);
+  assert.match(details, /upstream unavailable/);
+});
 
 test("summarizes the round with the compact fields needed for CLI output", () => {
   const summary = summarizeRound({
