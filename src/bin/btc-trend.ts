@@ -14,7 +14,7 @@ import {
 } from "../bot/positionSizing.ts";
 import { readLatestAuditState, writeRoundAuditRecord } from "../bot/audit.ts";
 
-const RUN_INTERVAL_MS = 15 * 60 * 1000;
+export const RUN_INTERVAL_MS = 3 * 60 * 1000;
 
 export function formatRoundStatus(
   executionRound: number,

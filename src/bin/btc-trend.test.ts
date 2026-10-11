@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { formatErrorDetails, formatRoundStatus, formatTraderRoundStatus } from "./btc-trend.ts";
+import {
+  RUN_INTERVAL_MS,
+  formatErrorDetails,
+  formatRoundStatus,
+  formatTraderRoundStatus,
+} from "./btc-trend.ts";
+
+test("uses a 3 minute scan interval", () => {
+  assert.equal(RUN_INTERVAL_MS, 3 * 60 * 1000);
+});
 
 test("formats nested error details for CLI failures", () => {
   const cause = Object.assign(new Error("socket hang up"), {
