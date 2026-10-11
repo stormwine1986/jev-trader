@@ -26,7 +26,10 @@ export async function decideBtcTrend(
   const closePrices = await getClosePrices();
 
   return client.decide({
-    state: closePrices,
+    state: {
+      close15m: closePrices.close15m,
+      close4h: closePrices.close4h,
+    },
     questions: btcTrendQuestions,
   });
 }

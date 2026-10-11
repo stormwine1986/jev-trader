@@ -10,6 +10,10 @@ import { decideBtcTrend, btcTrendQuestions } from "./btcTrendBot.ts";
 import { PositionManager, type ClosedPosition, type Position } from "./positionManagement.ts";
 import { calculateHalfKellyPositionPercent } from "./positionSizing.ts";
 import {
+	calculateStopLossTakeProfitPrices,
+	DEFAULT_STOP_LOSS_ATR_MULTIPLIER,
+} from "./positionSizing.ts";
+import {
 	DEFAULT_PAYOFF_RATIO,
 	DEFAULT_WIN_PROBABILITY,
 } from "./positionSizing.ts";
@@ -26,6 +30,7 @@ export type TraderBotOptions = {
 	confidenceThreshold?: number;
 	winProbability?: number;
 	payoffRatio?: number;
+	stopLossAtrMultiplier?: number;
 	getClosePrices?: () => Promise<BtcTrendClosePrices>;
 };
 
@@ -44,10 +49,12 @@ export type TraderBotResult = {
 		availableFunds: number;
 		executableValue: number | null;
 		shares: number | null;
+		stopLossPrice: number | null;
+		takeProfitPrice: number | null;
 	};
 	closedPositions: ClosedPosition[];
 	openedPosition?: Position;
-	reason?: "below-threshold" | "unsupported-trend" | "already-positioned" | "no-positive-edge" | "no-available-funds";
+	reason?: "below-threshold" | "unsupported-trend" | "invalid-atr" | "already-positioned" | "no-positive-edge" | "no-available-funds";
 };
 
 export async function runTraderBot({
@@ -57,6 +64,7 @@ export async function runTraderBot({
 	confidenceThreshold = DEFAULT_TREND_CONFIDENCE_THRESHOLD,
 	winProbability = DEFAULT_WIN_PROBABILITY,
 	payoffRatio = DEFAULT_PAYOFF_RATIO,
+	stopLossAtrMultiplier = DEFAULT_STOP_LOSS_ATR_MULTIPLIER,
 	getClosePrices = getRecentBtcTrendClosePrices,
 }: TraderBotOptions): Promise<TraderBotResult> {
 	if (!Number.isInteger(executionRound) || executionRound < 1) {
@@ -66,7 +74,7 @@ export async function runTraderBot({
 		throw new RangeError("confidenceThreshold must be between 0 and 1");
 	}
 
-	let closePrices: BtcTrendClosePrices = { close15m: [], close4h: [] };
+	let closePrices: BtcTrendClosePrices = { close15m: [], close4h: [], atr14_15m: 0 };
 	const decision = await decideBtcTrend(client, async () => {
 		closePrices = await getClosePrices();
 		return closePrices;
@@ -90,8 +98,10 @@ export async function runTraderBot({
 			positionManager,
 			winProbability,
 			payoffRatio,
+			stopLossAtrMultiplier,
 			targetType,
 			latestClose,
+			closePrices.atr14_15m,
 		),
 		closedPositions: [],
 	};
@@ -110,6 +120,10 @@ export async function runTraderBot({
 	if (exitPrice === undefined || !Number.isFinite(exitPrice) || exitPrice <= 0) {
 		throw new RangeError("the latest close price must be greater than 0");
 	}
+	if (!Number.isFinite(closePrices.atr14_15m) || closePrices.atr14_15m <= 0) {
+		result.reason = "invalid-atr";
+		return result;
+	}
 
 	for (const position of positionManager.positions) {
 		if (position.symbol === BTC_SYMBOL && position.type !== targetType) {
@@ -120,8 +134,10 @@ export async function runTraderBot({
 		positionManager,
 		winProbability,
 		payoffRatio,
+		stopLossAtrMultiplier,
 		targetType,
 		exitPrice,
+		closePrices.atr14_15m,
 	);
 
 	if (positionManager.positions.some(
@@ -147,6 +163,8 @@ export async function runTraderBot({
 		type: targetType,
 		shares: positionValue / exitPrice,
 		entryPrice: exitPrice,
+		stopLossPrice: result.positionRecommendation.stopLossPrice!,
+		takeProfitPrice: result.positionRecommendation.takeProfitPrice!,
 	});
 	return result;
 }
@@ -155,8 +173,10 @@ function buildPositionRecommendation(
 	positionManager: PositionManager,
 	winProbability: number,
 	payoffRatio: number,
+	stopLossAtrMultiplier: number,
 	direction: "BUY" | "SELL" | null,
 	price: number | undefined,
+	atr14: number,
 ): TraderBotResult["positionRecommendation"] {
 	const positionPercent = calculateHalfKellyPositionPercent({
 		winProbability,
@@ -168,6 +188,15 @@ function buildPositionRecommendation(
 	const executableValue = requestedValue === null
 		? null
 		: Math.min(requestedValue, positionManager.availableFunds);
+	const exitLevels = direction !== null && price !== undefined && price > 0 && atr14 > 0
+		? calculateStopLossTakeProfitPrices({
+			direction,
+			entryPrice: price,
+			atr14,
+			atrMultiplier: stopLossAtrMultiplier,
+			payoffRatio,
+		})
+		: null;
 
 	return {
 		direction,
@@ -178,5 +207,7 @@ function buildPositionRecommendation(
 		shares: executableValue !== null && price !== undefined && price > 0
 			? executableValue / price
 			: null,
+		stopLossPrice: exitLevels?.stopLossPrice ?? null,
+		takeProfitPrice: exitLevels?.takeProfitPrice ?? null,
 	};
 }

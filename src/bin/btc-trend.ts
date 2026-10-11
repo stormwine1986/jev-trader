@@ -8,6 +8,7 @@ import { PositionManager } from "../bot/positionManagement.ts";
 import { DEFAULT_TREND_CONFIDENCE_THRESHOLD } from "../bot/traderBot.ts";
 import {
   DEFAULT_PAYOFF_RATIO,
+  DEFAULT_STOP_LOSS_ATR_MULTIPLIER,
   DEFAULT_WIN_PROBABILITY,
 } from "../bot/positionSizing.ts";
 import { readLatestAuditState, writeRoundAuditRecord } from "../bot/audit.ts";
@@ -71,6 +72,10 @@ async function main() {
         ),
         payoffRatio: Number(
           process.env.TRADER_PAYOFF_RATIO ?? DEFAULT_PAYOFF_RATIO,
+        ),
+        stopLossAtrMultiplier: Number(
+          process.env.TRADER_STOP_LOSS_ATR_MULTIPLIER ??
+            DEFAULT_STOP_LOSS_ATR_MULTIPLIER,
         ),
       });
     } catch (error) {

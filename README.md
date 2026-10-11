@@ -10,12 +10,12 @@
 
 - 利用决策组件决策 BTC 的价格趋势
 - 置信度高于默认阈值 `0.7` 才确认趋势；未确认时不交易
-- 使用 `.env` 中设置的胜率和盈亏比输入半凯利仓位计算器，按账户余额与最新收盘价计算仓位
+- 使用 `.env` 中设置的胜率和盈亏比输入半凯利仓位计算器，按账户余额与最新收盘价计算仓位；按 `K * ATR14(15m)` 计算止损距离，并按盈亏比计算止盈距离
 - 看涨时先平掉 BTC 空头仓位，再开多头；看跌时先平掉 BTC 多头仓位，再开空头
 - 已有同方向 BTC 仓位时不重复加仓；开仓金额不会超过可用资金
 - 将模拟执行结果和账户状态写入审计记录
 
-运行时可通过 `BTC_TREND_CONFIDENCE_THRESHOLD` 设置 `[0, 1]` 内的趋势置信度阈值，通过 `TRADER_INITIAL_BALANCE` 设置模拟初始资金（默认 `10000`），通过 `TRADER_WIN_PROBABILITY` 设置半凯利胜率（默认 `0.35`）和 `TRADER_PAYOFF_RATIO` 设置盈亏比（默认 `3`）。趋势置信度仅用于判断是否交易，不作为半凯利胜率。该 CLI 每次启动都会创建新的内存账本，结果不会持久化，也不会连接交易所。
+运行时可通过 `BTC_TREND_CONFIDENCE_THRESHOLD` 设置 `[0, 1]` 内的趋势置信度阈值，通过 `TRADER_INITIAL_BALANCE` 设置模拟初始资金（默认 `10000`），通过 `TRADER_WIN_PROBABILITY` 设置半凯利胜率（默认 `0.35`）、`TRADER_PAYOFF_RATIO` 设置盈亏比（默认 `3`），以及 `TRADER_STOP_LOSS_ATR_MULTIPLIER` 设置 K（默认 `2`）。止损价和止盈价会保存在仓位建议中；开仓时也会记录到仓位及账户审计快照中。趋势置信度仅用于判断是否交易，不作为半凯利胜率。该 CLI 不会连接交易所。
 
 ## Jev 决策组件
 
@@ -37,7 +37,7 @@ console.log(decision.answers.trend.choice);
 
 ## 仓位计算组件
 
-`src/bot/positionSizing.ts` 使用半凯利公式计算建议仓位百分比。默认冷启动胜率为 `35%`、盈亏比为 `3`，对应建议仓位约为 `6.67%`；也可以传入经过验证的胜率和盈亏比：
+`src/bot/positionSizing.ts` 使用半凯利公式计算建议仓位百分比，并依据入场价、ATR14、K 和盈亏比计算止损/止盈价。多头止损在入场价下方、止盈在上方；空头方向相反。默认冷启动胜率为 `35%`、盈亏比为 `3`，对应建议仓位约为 `6.67%`；也可以传入经过验证的胜率和盈亏比：
 
 ```ts
 import { calculateHalfKellyPositionPercent } from "./bot/positionSizing.js";

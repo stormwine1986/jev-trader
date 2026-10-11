@@ -6,6 +6,8 @@ export type Position = {
 	type: PositionType;
 	shares: number;
 	entryPrice: number;
+	stopLossPrice?: number;
+	takeProfitPrice?: number;
 };
 
 export type OpenPositionOptions = Omit<Position, "id">;
@@ -59,6 +61,11 @@ export class PositionManager {
 			}
 			manager.assertPositiveFinite(position.shares, "shares");
 			manager.assertPositiveFinite(position.entryPrice, "entryPrice");
+			manager.assertOptionalPositiveFinite(position.stopLossPrice, "stopLossPrice");
+			manager.assertOptionalPositiveFinite(position.takeProfitPrice, "takeProfitPrice");
+			if ((position.stopLossPrice === undefined) !== (position.takeProfitPrice === undefined)) {
+				throw new TypeError("stop-loss and take-profit prices must be provided together");
+			}
 			manager.openPositions.set(position.id, { ...position });
 			manager.nextPositionId = Math.max(manager.nextPositionId, position.id + 1);
 		}
@@ -94,6 +101,11 @@ export class PositionManager {
 		}
 		this.assertPositiveFinite(options.shares, "shares");
 		this.assertPositiveFinite(options.entryPrice, "entryPrice");
+		this.assertOptionalPositiveFinite(options.stopLossPrice, "stopLossPrice");
+		this.assertOptionalPositiveFinite(options.takeProfitPrice, "takeProfitPrice");
+		if ((options.stopLossPrice === undefined) !== (options.takeProfitPrice === undefined)) {
+			throw new TypeError("stop-loss and take-profit prices must be provided together");
+		}
 
 		const requiredFunds = options.shares * options.entryPrice;
 		if (!Number.isFinite(requiredFunds)) {
@@ -133,6 +145,12 @@ export class PositionManager {
 	private assertPositiveFinite(value: number, name: string): void {
 		if (!Number.isFinite(value) || value <= 0) {
 			throw new RangeError(`${name} must be greater than 0`);
+		}
+	}
+
+	private assertOptionalPositiveFinite(value: number | undefined, name: string): void {
+		if (value !== undefined) {
+			this.assertPositiveFinite(value, name);
 		}
 	}
 }
